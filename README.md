@@ -9,3 +9,11 @@ The principal beneficiary of this library is to be the upcoming JIT compiler for
 Although called "assembler", it does not pretend to support coding with assembly mnemonics, which is beyond the scope of this subproject. The point is that it
 allows you to use symbolic addresses (AKA labels) and multiple assembly sections (corresponding to `.text` and `.rodata` sections in System V ABI) during the
 course of incremental code emission, which is suitable for implementing efficient one-pass (tree-walking) code generators.
+
+#### Sample piece of code using the API
+
+You can find an example demostrating most facilities of the library in [test.cc](test.cc).
+
+#### Building the code in the repository
+
+    g++ -{w,std=c++17} -{O3,s} {jit-asm,test}.cc
