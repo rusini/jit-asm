@@ -45,15 +45,6 @@ namespace rsn {
             { if (RSN_UNLIKELY(base)) std::free(const_cast<unsigned char *>(base)); } // own fast/slow path split
       public:
          RSN_INLINE explicit constexpr _sect(decltype(is_rodata) is_rodata) noexcept: is_rodata(is_rodata) {} // non-aggregate
-      public: // opaque, first-class ID of a section in context of a specific (assumed) instance of objcode
-         class id { // (this lacks an explicit reference to that instance to fully identify a section)
-            friend objcode;
-            int sn;
-            RSN_INLINE explicit constexpr id(decltype(sn) sn) noexcept: sn(sn) {}
-         public:
-            explicit id() = default;
-            static const id unspec;
-         };
       public: // helper stuff
          struct fixup { // AKA relocation records - specific to x86 and x86-64 ISAs (suitable for x86 and all code models for x86-64)
             enum { plus_label_quad, plus_label_long, plus_label_minus_next_addr_long, plus_label_minus_next_addr_byte, minus_next_addr_long } kind;
@@ -64,15 +55,6 @@ namespace rsn {
       class _label {
       public:
          int sect/*s/n*/, offset;
-      public: // opaque, first-class ID of a label in context of a specific (assumed) instance of objcode
-         class id { // (this lacks an explicit reference to that instance to fully identify a label)
-            friend objcode;
-            int sn;
-            RSN_INLINE explicit constexpr id(decltype(sn) sn) noexcept: sn(sn) {}
-         public:
-            explicit id() = default;
-            static const id unspec;
-         };
       };
    private: // data size nomenclature (specific to AT&T assembly language for x86 and x86-64 ISAs)
       struct RSN_PACK x86byte { unsigned char      _; };
@@ -81,21 +63,40 @@ namespace rsn {
       struct RSN_PACK x86quad { unsigned long long _; };
    public: // components
       // Symbolic Addresses ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-      class label: public _label::id { // fully identifies a label
-      public:
-         objcode &owner; // makes the whole containing class non-assignable (that is, reference-alike itself), which is tolerable (otherwise, ID could be used instead)
-         RSN_INLINE constexpr label(decltype(owner) owner, id _) noexcept: owner(owner), id(_) {}
+      class label { // fully identifies a label
+      public: // (*)
+         // Non-static data members whose type is const-qualified or a reference type render the whole containing class type non-assignable (that is,
+         // second-class and reference-alike itself), which is an acceptable limitation (otherwise, just the opaque ID is also available to be used directly).
+         objcode &owner;
+         // opaque, first-class ID of a label in context of a specific (assumed) instance of the *objcode* class
+         // (This lacks an explicit reference to that instance to fully identify a label.)
+         const class id {
+            friend objcode;
+            int sn;
+            RSN_INLINE explicit constexpr id(decltype(sn) sn) noexcept: sn(sn) {}
+         public:
+            explicit id() = default; // Default constructor is explicit and provides no initialization.
+            static const id unspec;  // initializer to an unspecified value
+         } id;
       };
       // Program Text and (RO)Data Sections ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-      class sect/*ion*/: public _sect::id { // fully identifies a section
-      public:
-         objcode &owner; // makes the whole containing class non-assignable (that is, reference-alike itself), which is tolerable (otherwise, ID could be used instead)
-         RSN_INLINE constexpr sect(decltype(owner) owner, id _) noexcept: owner(owner), id(_) {}
+      class sect/*ion*/ { // fully identifies a section
+      public: // see (*) above
+         objcode &owner;
+         // opaque, first-class ID of a section (see (*) above)
+         const class id {
+            friend objcode;
+            int sn;
+            RSN_INLINE explicit constexpr id(decltype(sn) sn) noexcept: sn(sn) {}
+         public:
+            explicit id() = default;
+            static const id unspec;
+         } id;
       public: // assembly memory allocation
          RSN_INLINE auto reserve(int size) const {
             assert(size >= 0);
-            if (RSN_LIKELY((unsigned)owner._sects[sn].res + size <= owner._sects[sn].alloc))
-               owner._sects[sn].res += size; // fast path
+            if (RSN_LIKELY((unsigned)owner._sects[id.sn].res + size <= owner._sects[id.sn].alloc))
+               owner._sects[id.sn].res += size; // fast path
             else [](auto &sect, auto size)RSN_NOINLINE {
                if (RSN_UNLIKELY((unsigned)sect.res + size > 1 << max_segm_size_p2)) throw std::bad_alloc{};
                auto pc = (int)(sect.pc - sect.base);
@@ -105,18 +106,18 @@ namespace rsn {
                if (RSN_UNLIKELY(!base)) throw std::bad_alloc{};
                sect.base = base, sect.pc = base + pc, sect.alloc = std::min(res + res / 2, 1 << max_segm_size_p2);
                sect.res = res;
-            }(owner._sects[sn], size); // slow path
+            }(owner._sects[id.sn], size); // slow path
             return *this;
          }
       public: // appending section contents (specific to x86 and x86-64 ISAs)
          RSN_INLINE auto b(decltype(x86byte::_) val = {}) const noexcept
-            { assert(size() + sizeof(x86byte) <= reserved()); ((x86byte *)owner._sects[sn].pc)->_ = val, owner._sects[sn].pc += sizeof(x86byte); return *this; }
+            { assert(size() + sizeof(x86byte) <= reserved()); ((x86byte *)owner._sects[id.sn].pc)->_ = val, owner._sects[id.sn].pc += sizeof(x86byte); return *this; }
          RSN_INLINE auto w(decltype(x86word::_) val = {}) const noexcept
-            { assert(size() + sizeof(x86word) <= reserved()); ((x86word *)owner._sects[sn].pc)->_ = val, owner._sects[sn].pc += sizeof(x86word); return *this; }
+            { assert(size() + sizeof(x86word) <= reserved()); ((x86word *)owner._sects[id.sn].pc)->_ = val, owner._sects[id.sn].pc += sizeof(x86word); return *this; }
          RSN_INLINE auto l(decltype(x86long::_) val = {}) const noexcept
-            { assert(size() + sizeof(x86long) <= reserved()); ((x86long *)owner._sects[sn].pc)->_ = val, owner._sects[sn].pc += sizeof(x86long); return *this; }
+            { assert(size() + sizeof(x86long) <= reserved()); ((x86long *)owner._sects[id.sn].pc)->_ = val, owner._sects[id.sn].pc += sizeof(x86long); return *this; }
          RSN_INLINE auto q(decltype(x86quad::_) val = {}) const noexcept
-            { assert(size() + sizeof(x86quad) <= reserved()); ((x86quad *)owner._sects[sn].pc)->_ = val, owner._sects[sn].pc += sizeof(x86quad); return *this; }
+            { assert(size() + sizeof(x86quad) <= reserved()); ((x86quad *)owner._sects[id.sn].pc)->_ = val, owner._sects[id.sn].pc += sizeof(x86quad); return *this; }
          // sometimes it's convenient to store in BE format (for instruction encoding)
          RSN_INLINE auto sw(decltype(x86word::_) val) const noexcept { return w(__builtin_bswap16(val)); }
          RSN_INLINE auto sl(decltype(x86long::_) val) const noexcept { return l(__builtin_bswap32(val)); }
@@ -128,23 +129,23 @@ namespace rsn {
       public:
          // symbolic and relative addresses
          RSN_INLINE auto q (class label label, decltype(x86quad::_) offset = 0) const { // for 64-bit code models
-            return owner._fixups.push_back({_sect::fixup::plus_label_quad, sn,
-               (int)(owner._sects[sn].pc - owner._sects[sn].base), label.sn}), q(offset);
+            return owner._fixups.push_back({_sect::fixup::plus_label_quad, id.sn,
+               (int)(owner._sects[id.sn].pc - owner._sects[id.sn].base), label.id.sn}), q(offset);
          }
          RSN_INLINE auto l (class label label, decltype(x86long::_) offset = 0) const { // for 32-bit code models
-            return owner._fixups.push_back({_sect::fixup::plus_label_long, sn,
-               (int)(owner._sects[sn].pc - owner._sects[sn].base), label.sn}), l(offset);
+            return owner._fixups.push_back({_sect::fixup::plus_label_long, id.sn,
+               (int)(owner._sects[id.sn].pc - owner._sects[id.sn].base), label.id.sn}), l(offset);
          }
          RSN_INLINE auto rl(class label label, decltype(x86long::_) offset = 0) const {
-            return owner._fixups.push_back({_sect::fixup::plus_label_minus_next_addr_long, sn,
-               (int)(owner._sects[sn].pc - owner._sects[sn].base), label.sn}), l(offset); }
+            return owner._fixups.push_back({_sect::fixup::plus_label_minus_next_addr_long, id.sn,
+               (int)(owner._sects[id.sn].pc - owner._sects[id.sn].base), label.id.sn}), l(offset); }
          RSN_INLINE auto rb(class label label, decltype(x86byte::_) offset = 0) const {
-            return owner._fixups.push_back({_sect::fixup::plus_label_minus_next_addr_byte, sn,
-               (int)(owner._sects[sn].pc - owner._sects[sn].base), label.sn}), b(offset);
+            return owner._fixups.push_back({_sect::fixup::plus_label_minus_next_addr_byte, id.sn,
+               (int)(owner._sects[id.sn].pc - owner._sects[id.sn].base), label.id.sn}), b(offset);
          }
          RSN_INLINE auto rl(decltype(x86long::_) val) const { // for 32-bit code models
-            return owner._fixups.push_back({_sect::fixup::minus_next_addr_long, sn,
-               (int)(owner._sects[sn].pc - owner._sects[sn].base)}), l(val);
+            return owner._fixups.push_back({_sect::fixup::minus_next_addr_long, id.sn,
+               (int)(owner._sects[id.sn].pc - owner._sects[id.sn].base)}), l(val);
          }
          // convenience helpers for the above
          template<typename Type> RSN_INLINE auto rl(Type *val) const { return rl(reinterpret_cast<unsigned long>(val)); } // for 32-bit code models
@@ -153,9 +154,9 @@ namespace rsn {
             assert(__builtin_popcount(boundary) == 1 && boundary <= 1 << cacheline_size_p2);
             assert(max >= 0 && (max < boundary || max == 1 << cacheline_size_p2));
             assert(size() + std::min(boundary - 1, max) <= reserved());
-            auto pad_size = (int)(owner._sects[sn].base - owner._sects[sn].pc & boundary - 1);
+            auto pad_size = (int)(owner._sects[id.sn].base - owner._sects[id.sn].pc & boundary - 1);
             if (RSN_LIKELY(pad_size > max)) return *this;
-            if (RSN_UNLIKELY(owner._sects[sn].align < boundary)) owner._sects[sn].align = boundary;
+            if (RSN_UNLIKELY(owner._sects[id.sn].align < boundary)) owner._sects[id.sn].align = boundary;
             for (auto _ = pad_size / 10; _; --_) sw(0x662E).sq(0x0F1F84'00000000'00);
             switch (pad_size % 10) {
             case 0: return *this;
@@ -173,12 +174,12 @@ namespace rsn {
          }
       public: // defining (placing) labels
          RSN_INLINE auto label(class label label, int offset = 0) const noexcept
-            { assert(&label.owner == &owner); owner._labels[label.sn] = {sn, (int)(owner._sects[sn].pc - owner._sects[sn].base) + offset}; return *this; }
+            { assert(&label.owner == &owner); owner._labels[label.id.sn] = {id.sn, (int)(owner._sects[id.sn].pc - owner._sects[id.sn].base) + offset}; return *this; }
          // convenience helpers for the above
          RSN_INLINE auto label(int offset = 0) const { auto label = owner.label(); this->label(label, offset); return label; }
       public: // misc operations
-         RSN_INLINE auto size() const noexcept { return (int)(owner._sects[sn].pc - owner._sects[sn].base); }
-         RSN_INLINE auto reserved() const noexcept { return owner._sects[sn].res; }
+         RSN_INLINE auto size() const noexcept { return (int)(owner._sects[id.sn].pc - owner._sects[id.sn].base); }
+         RSN_INLINE auto reserved() const noexcept { return owner._sects[id.sn].res; }
       };
       // Target Memory Segment for Object Code Loading /////////////////////////////////////////////////////////////////////////////////////////////////////////
       class segm/*ent*/ { // dynamically allocated
@@ -209,13 +210,13 @@ namespace rsn {
       RSN_INLINE auto rodata() { return sect(true); }
    public:
       RSN_INLINE class label label() {
-         if (RSN_UNLIKELY((decltype(label::sn))_labels.size() == std::numeric_limits<decltype(label::sn)>::max())) throw std::bad_alloc{};
-         _labels.emplace_back(); return {*this, label::id{(decltype(label::sn))_labels.size() - 1}};
+         if (RSN_UNLIKELY((decltype(label::id::sn))_labels.size() == std::numeric_limits<decltype(label::id::sn)>::max())) throw std::bad_alloc{};
+         _labels.emplace_back(); return {*this, decltype(label::id){(decltype(label::id::sn))_labels.size() - 1}};
       }
    public: // misc operations
       RSN_INLINE class sect sect(bool is_rodata) {
-         if (RSN_UNLIKELY((decltype(sect::sn))_sects.size() == std::numeric_limits<decltype(sect::sn)>::max())) throw std::bad_alloc{};
-         _sects.emplace_back(is_rodata); return {*this, sect::id{(decltype(sect::sn))_sects.size() - 1}};
+         if (RSN_UNLIKELY((decltype(sect::id::sn))_sects.size() == std::numeric_limits<decltype(sect::id::sn)>::max())) throw std::bad_alloc{};
+         _sects.emplace_back(is_rodata); return {*this, decltype(sect::id){(decltype(sect::id::sn))_sects.size() - 1}};
       }
    public:
       int size() const;
@@ -252,7 +253,7 @@ namespace rsn {
 
 } // namespace rsn::mnl
 
-constexpr rsn::objcode::sect::id  rsn::objcode::sect::id::unspec{-1};
-constexpr rsn::objcode::label::id rsn::objcode::label::id::unspec{-1};
+constexpr decltype(rsn::objcode::sect::id::unspec)  rsn::objcode::sect::id::unspec{-1};
+constexpr decltype(rsn::objcode::label::id::unspec) rsn::objcode::label::id::unspec{-1};
 
 # endif // # ifndef RSN_INCLUDED_JIT_ASM

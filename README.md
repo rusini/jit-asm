@@ -6,6 +6,6 @@ compiler code generator, and eventually loading it into target address as execut
 
 The principal user of this library is to be the upcoming JIT compiler for the MANOOL programming language (https://manool.org).
 
-Although called "assembler", this does not pretend to support coding with assembly mnemonics, which is not the point of this subproject, but it does support
-using symbolic addresses (AKA labels or symbols) and multiple assembly sections (corresponding to `.text` and `.rodata` sections in System V ABI), which is
-suitable for implementing simple one-pass code generators.
+Although called "assembler", it does not pretend to support coding with assembly mnemonics, which is beyond the scope of the subproject. The point is that it
+supports using symbolic addresses (AKA labels) and multiple assembly sections (corresponding to `.text` and `.rodata` sections in System V ABI), which is
+suitable for implementing efficient one-pass (tree-walking) code generators.
