@@ -16,7 +16,7 @@
 
 # include <new>       // bad_alloc
 # include <cassert>
-# include <cstdlib>   // free, realloc
+# include <cstdlib>   // realloc, free
 # include <cstring>   // memcpy
 # include <limits>
 # include <vector>
@@ -154,7 +154,7 @@ namespace rsn {
             assert(__builtin_popcount(boundary) == 1 && boundary <= 1 << cacheline_size_p2);
             assert(max >= 0 && (max < boundary || max == 1 << cacheline_size_p2));
             assert(size() + std::min(boundary - 1, max) <= reserved());
-            auto pad_size = (int)(owner._sects[id.sn].base - owner._sects[id.sn].pc & boundary - 1);
+            int pad_size = owner._sects[id.sn].base - owner._sects[id.sn].pc & boundary - 1;
             if (RSN_LIKELY(pad_size > max)) return *this;
             if (RSN_UNLIKELY(owner._sects[id.sn].align < boundary)) owner._sects[id.sn].align = boundary;
             for (auto _ = pad_size / 10; _; --_) sw(0x662E).sq(0x0F1F84'00000000'00);
@@ -251,9 +251,9 @@ namespace rsn {
 
    RSN_INLINE inline void swap(objcode::segm &lhs, objcode::segm &rhs) noexcept { lhs.swap(rhs); }
 
-} // namespace rsn::mnl
+} // namespace rsn
 
-constexpr decltype(rsn::objcode::sect::id::unspec)  rsn::objcode::sect::id::unspec{-1};
-constexpr decltype(rsn::objcode::label::id::unspec) rsn::objcode::label::id::unspec{-1};
+constexpr decltype(rsn::objcode::sect::id)  rsn::objcode::sect::id::unspec{-1};
+constexpr decltype(rsn::objcode::label::id) rsn::objcode::label::id::unspec{-1};
 
 # endif // # ifndef RSN_INCLUDED_JIT_ASM

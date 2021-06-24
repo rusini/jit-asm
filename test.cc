@@ -33,17 +33,16 @@ int main() {
       // auxiliary text section begin
       auto l2 = oc.label(), l_str = ds.label();
       ts.owner.text().reserve(64) .align(16).label(l1)
-         .b(0x48).sw(0x8D3D).rl(l_str)                 // leaq l_str(%rip), %rdi
-         .b(0x4C).sw(0x89FE)                           // movq %r15, %rsi
-         .sw(0x48B8).q(::printf) .sw(0xFFD0)           // movabsq $printf, %rax; call *%rax
-         .b(0x41).sw(0x83C4).b(1)                      // addl $1, %r12d
+         .b(0x48).sw(0x8D3D).rl(l_str) .b(0x4C).sw(0x89FE) // leaq l_str(%rip), %rdi; movq %r15, %rsi
+         .sw(0x48B8).q(::printf) .sw(0xFFD0)               // movabsq $printf, %rax; call *%rax
+         .b(0x41).sw(0x83C4).b(1)                          // addl $1, %r12d
          // spin loop begin
-         .b(0xB9).l(1'000'000'000)                     // movl $1*1000*1000*1000, %ecx
+         .b(0xB9).l(1'000'000'000)                         // movl $1*1000*1000*1000, %ecx
          .align(16, 6).label(l2)
-         .b(0x90)                                      // nop
-         .sw(0x83E9).b(1) .b(0x75).rb(l2)              // subl $1, %ecx; jnz.d8 l2
+         .b(0x90)                                          // nop
+         .sw(0x83E9).b(1) .b(0x75).rb(l2)                  // subl $1, %ecx; jnz.d8 l2
          // spin loop end
-         .b(0xE9).rl(ts.align(16, 10).label());        // jmp.d32 0f
+         .b(0xE9).rl(ts.align(16, 10).label());            // jmp.d32 0f
       ds .reserve(16) .label(l_str).b("x = %llu\n"); // a piece for rodata section
       // auxiliary text section end
       ts                                                          // 0:
