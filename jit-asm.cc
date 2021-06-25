@@ -38,7 +38,7 @@ int rsn::objcode::size() const {
 void rsn::objcode::load(unsigned char *RSN_RESTRICT base) const {
    if (RSN_LIKELY(!base)) return;
    // target virtual address after section loading for each section
-   auto using_vla = (int)_sects.size() <= (1 << 16) / sizeof(unsigned char *) /*64 KiB*/; // VLAs in C++ (and zero-length VLAs) is a GCC extension:
+   auto using_vla = (int)_sects.size() <= (1 << 16) / sizeof(unsigned char *) /*64 KiB*/; // VLAs in C++ (and zero-length VLAs) is a GCC extension
    unsigned char *_vla[RSN_LIKELY(using_vla) ? _sects.size() : 0], **const load_base = RSN_LIKELY(using_vla) ? _vla : new unsigned char *[_sects.size()];
    // transfer contents of sections to target load address
    [&]()RSN_INLINE {
@@ -92,7 +92,7 @@ void rsn::objcode::load(unsigned char *RSN_RESTRICT base) const {
 
 namespace rsn {
    constexpr auto
-      min_size_p2    = 1 + 6      /*128 B - two cache lines       */,
+      min_size_p2    = 1 + 6      /*128 B   - two cache lines     */,
       threshold_1_p2 = 1 + 2 + 10 /*  8 KiB - up to ~14x overhead */, // if size is above, use ::madvise to release unneeded physical storage
       threshold_2_p2 = 8 + 10     /*256 KiB - up to ~16 Ki mmaps  */; // if size is above, delegate to ::mmap/::munmap directly
    namespace {
@@ -148,7 +148,7 @@ void rsn::objcode::segm::_alloc(int size) {
             _base = mmap(1 << size_p2); total_phys += prefault_size;
          } else {
             prefault_size = 0;
-            //if (RSN_UNLIKELY(total_phys + (1 << page_size_p2)) throw std::bad_alloc{};
+            if (RSN_UNLIKELY(total_phys + (1 << page_size_p2) > max_total_phys)) throw std::bad_alloc{};
             auto base = _base = mmap(1 << page_size_p2);
             for (auto _ = 1 << page_size_p2 - size_p2; --_;) ((struct free *)(base += 1 << size_p2))->next =
                free[size_p2 - min_size_p2], free[size_p2 - min_size_p2] = base;

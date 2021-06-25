@@ -226,22 +226,24 @@ namespace rsn {
    public:
       int size() const;
       void load(unsigned char *) const;
+   public:
+      RSN_INLINE void clear() noexcept { _sects.clear(), _fixups.clear(), _labels.clear(); }
    private: // internal representation
       std::vector<_sect>        _sects;
       std::vector<_sect::fixup> _fixups;
       std::vector<_label>       _labels;
    private: // internal helper stuff
       static constexpr auto
-         cacheline_size_p2 =  6 /*64 B*/,  // for CPU L#i/L#d caches (typically 64 B for x86/x86-64 CPUs and many others)
-         page_size_p2      = 12 /*4 KiB*/; // for MMU paging (typically 4 KiB for x86/x86-64 CPUs and many others)
+         cacheline_size_p2 =  6 /*64 B*/,   // for CPU L#i/L#d caches (typically 64 B for x86/x86-64 CPUs and many others)
+         page_size_p2      = 12 /* 4 KiB*/; // for MMU paging (typically 4 KiB for x86/x86-64 CPUs and many others)
       static constexpr auto
          max_segm_size_p2 = // maximum size of an executable segment
          # if __x86_64__ && __SIZEOF_POINTER__ == __SIZEOF_LONG_LONG__
-            30 /*1 GiB*/
+            30 /* 1 GiB*/
          # elif __i386__ || __x86_64__ && __SIZEOF_POINTER__ == __SIZEOF_INT__
             24 /*16 MiB*/
          # elif __AARCH64EL__ || __ARMEL__
-            20 /*1 MiB*/
+            20 /* 1 MiB*/
          # else
             # error "Unsupported or not tested target ISA or ABI"
             page_size_p2
