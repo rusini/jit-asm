@@ -27,7 +27,7 @@ int rsn::objcode::size() const {
       pc += (int)(sect.pc - sect.base);
    }
    if (RSN_LIKELY(!has_rodata)) return pc;
-   pc = pc + ((1 << cacheline_size_p2) - 1) & -(1 << cacheline_size_p2);
+   pc = pc + (1 << cacheline_size_p2) - 1 & -(1 << cacheline_size_p2);
    for (const auto &sect: _sects) if (!RSN_UNLIKELY(sect.is_rodata)); else {
       if (RSN_UNLIKELY((unsigned)(pc = pc + sect.align - 1 & -sect.align) + (int)(sect.pc - sect.base) > 1 << max_segm_size_p2)) return -1;
       pc += (int)(sect.pc - sect.base);
@@ -36,7 +36,7 @@ int rsn::objcode::size() const {
 }
 
 void rsn::objcode::load(unsigned char *RSN_RESTRICT base) const {
-   if (RSN_LIKELY(!base)) return;
+   if (RSN_UNLIKELY(!base)) return;
    // target virtual address after section loading for each section
    auto using_vla = (int)_sects.size() <= (1 << 16) / sizeof(unsigned char *) /*64 KiB*/; // VLAs in C++ (and zero-length VLAs) is a GCC extension
    unsigned char *_vla[RSN_LIKELY(using_vla) ? _sects.size() : 0], **const load_base = RSN_LIKELY(using_vla) ? _vla : new unsigned char *[_sects.size()];
