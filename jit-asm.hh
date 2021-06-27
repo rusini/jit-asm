@@ -19,10 +19,16 @@
 # include <cstdlib>   // realloc, free
 # include <cstring>   // memcpy
 # include <limits>
+# include <utility>   // swap
 # include <vector>
 # include <algorithm> // max/min
 
 # include "rusini0.hh"
+
+// Arithmetic: using signed integral types (with UB-on-overflow semantics) where possible; preferring 32-bit operations and zero extension where applicable
+// Integral types: preferring plain C++ type names to cstdint aliases for extra clarity on type promotion/conversion rules applied
+// Aliasing rules: adhering to P0593R6 and to C11 wording about memcpy/memmove special cases (and using the GCC extension RSN_BARRIER where required)
+// Assertion strategy: stating only trivially checkable preconditions (leaving other kinds of preconditions to be documented elsewhere, if at all)
 
 namespace rsn {
 
@@ -98,7 +104,7 @@ namespace rsn {
                owner._sects[id.sn].res += size; // fast path
             else [](auto &sect, auto size)RSN_NOINLINE {
                if (RSN_UNLIKELY((unsigned)sect.res + size > 1 << max_segm_size_p2)) throw std::bad_alloc{};
-               auto pc = (int)(sect.pc - sect.base);
+               int pc = sect.pc - sect.base;
                auto res = sect.res + size;
                auto base = static_cast<unsigned char *>(std::realloc(const_cast<unsigned char *>(sect.base),
                   (unsigned)std::min(res + res / 2, 1 << max_segm_size_p2)));
@@ -109,14 +115,22 @@ namespace rsn {
             return *this;
          }
       public: // appending section contents (specific to x86 and x86-64 ISAs)
-         RSN_INLINE auto b(decltype(x86byte::_) val = {}) const noexcept
-            { assert(size() + sizeof(x86byte) <= reserved()); ((x86byte *)owner._sects[id.sn].pc)->_ = val, owner._sects[id.sn].pc += sizeof(x86byte); return *this; }
-         RSN_INLINE auto w(decltype(x86word::_) val = {}) const noexcept
-            { assert(size() + sizeof(x86word) <= reserved()); ((x86word *)owner._sects[id.sn].pc)->_ = val, owner._sects[id.sn].pc += sizeof(x86word); return *this; }
-         RSN_INLINE auto l(decltype(x86long::_) val = {}) const noexcept
-            { assert(size() + sizeof(x86long) <= reserved()); ((x86long *)owner._sects[id.sn].pc)->_ = val, owner._sects[id.sn].pc += sizeof(x86long); return *this; }
-         RSN_INLINE auto q(decltype(x86quad::_) val = {}) const noexcept
-            { assert(size() + sizeof(x86quad) <= reserved()); ((x86quad *)owner._sects[id.sn].pc)->_ = val, owner._sects[id.sn].pc += sizeof(x86quad); return *this; }
+         RSN_INLINE auto b(decltype(x86byte::_) val = {}) const noexcept {
+            assert(size() + sizeof(x86byte) <= reserved());
+            reinterpret_cast<x86byte *>(owner._sects[id.sn].pc)->_ = val, owner._sects[id.sn].pc += sizeof(x86byte); return *this;
+         }
+         RSN_INLINE auto w(decltype(x86word::_) val = {}) const noexcept {
+            assert(size() + sizeof(x86word) <= reserved());
+            reinterpret_cast<x86word *>(owner._sects[id.sn].pc)->_ = val, owner._sects[id.sn].pc += sizeof(x86word); return *this;
+         }
+         RSN_INLINE auto l(decltype(x86long::_) val = {}) const noexcept {
+            assert(size() + sizeof(x86long) <= reserved());
+            reinterpret_cast<x86long *>(owner._sects[id.sn].pc)->_ = val, owner._sects[id.sn].pc += sizeof(x86long); return *this;
+         }
+         RSN_INLINE auto q(decltype(x86quad::_) val = {}) const noexcept {
+            assert(size() + sizeof(x86quad) <= reserved());
+            reinterpret_cast<x86quad *>(owner._sects[id.sn].pc)->_ = val, owner._sects[id.sn].pc += sizeof(x86quad); return *this;
+         }
          // sometimes it's convenient to store in BE format (for instruction encoding)
          RSN_INLINE auto sw(decltype(x86word::_) val) const noexcept { return w(__builtin_bswap16(val)); }
          RSN_INLINE auto sl(decltype(x86long::_) val) const noexcept { return l(__builtin_bswap32(val)); }
@@ -137,7 +151,8 @@ namespace rsn {
          }
          RSN_INLINE auto rl(struct label label, decltype(x86long::_) offset = 0) const {
             return owner._fixups.push_back({_sect::fixup::plus_label_minus_next_addr_long, id.sn,
-               (int)(owner._sects[id.sn].pc - owner._sects[id.sn].base), label.id.sn}), l(offset); }
+               (int)(owner._sects[id.sn].pc - owner._sects[id.sn].base), label.id.sn}), l(offset);
+         }
          RSN_INLINE auto rb(struct label label, decltype(x86byte::_) offset = 0) const {
             return owner._fixups.push_back({_sect::fixup::plus_label_minus_next_addr_byte, id.sn,
                (int)(owner._sects[id.sn].pc - owner._sects[id.sn].base), label.id.sn}), b(offset);
@@ -153,6 +168,7 @@ namespace rsn {
             assert(boundary > 0 && __builtin_popcount(boundary) == 1 && boundary <= 1 << cacheline_size_p2);
             assert(max >= 0 && (max < boundary || max == 1 << cacheline_size_p2));
             assert(size() + std::min(boundary - 1, max) <= reserved());
+
             int pad_size = owner._sects[id.sn].base - owner._sects[id.sn].pc & boundary - 1;
             if (RSN_LIKELY(pad_size > max)) return *this;
             if (RSN_UNLIKELY(owner._sects[id.sn].align < boundary)) owner._sects[id.sn].align = boundary;
@@ -198,15 +214,15 @@ namespace rsn {
          RSN_INLINE explicit segm(int size) { if (RSN_UNLIKELY(size)) _alloc(size); else _base = {}, _size = {}; }
       public: // access to contents
          template<typename Type> RSN_INLINE explicit operator Type *() const noexcept { return reinterpret_cast<Type *>(_base); }
+         RSN_INLINE explicit operator bool() const noexcept { return _base; }
       public:
          RSN_INLINE auto size() const noexcept { return _base ? _size : 0 /*branchless*/; }
-         RSN_INLINE explicit operator bool() const noexcept { return _base; }
       public: // misc operations
          RSN_INLINE segm(const objcode &rhs): segm(rhs.size()) { rhs.load(static_cast<unsigned char *>(*this)); }
          RSN_INLINE explicit segm(const segm &rhs): segm(rhs.size()) { _memcpy(static_cast<void *>(*this), static_cast<const void *>(rhs), size()); } // explicit-only
       private: // internal representation
          unsigned char *_base; int _size;
-      private: // internal helper stuff
+      private: // internal helper functions
          void _alloc(int), _free() noexcept;
       };
       RSN_INLINE segm load() const { return *this; }
@@ -224,7 +240,7 @@ namespace rsn {
          _sects.emplace_back(is_rodata); return {*this, decltype(sect::id){(decltype(sect::id::sn))_sects.size() - 1}};
       }
    public:
-      int size() const;
+      int size() const noexcept;
       void load(unsigned char *) const;
    public:
       RSN_INLINE void clear() noexcept { _sects.clear(), _fixups.clear(), _labels.clear(); }
@@ -232,10 +248,12 @@ namespace rsn {
       std::vector<_sect>        _sects;
       std::vector<_sect::fixup> _fixups;
       std::vector<_label>       _labels;
-   private: // internal helper stuff
+   private: // internal helper constants
       static constexpr auto
          cacheline_size_p2 =  6 /*64 B*/,   // for CPU L#i/L#d caches (typically 64 B for x86/x86-64 CPUs and many others)
          page_size_p2      = 12 /* 4 KiB*/; // for MMU paging (typically 4 KiB for x86/x86-64 CPUs and many others)
+      static_assert(cacheline_size_p2 < page_size_p2);
+   private:
       static constexpr auto
          max_segm_size_p2 = // maximum size of an executable segment
          # if __x86_64__ && __SIZEOF_POINTER__ == __SIZEOF_LONG_LONG__
@@ -246,12 +264,12 @@ namespace rsn {
             20 /* 1 MiB*/
          # else
             # error "Unsupported or not tested target ISA or ABI"
-            page_size_p2
+            30
          # endif
             ;
-      static_assert(max_segm_size_p2 >= page_size_p2);
+      static_assert(max_segm_size_p2 > page_size_p2);
       static_assert(max_segm_size_p2 < std::numeric_limits<int>::digits);
-   private:
+   private: // internal helper functions
       RSN_INLINE static void *_memcpy(void *lhs, const void *rhs, int size) noexcept
          { if (RSN_LIKELY(size)) std::memcpy(lhs, rhs, (unsigned)size); return lhs; }
    };
